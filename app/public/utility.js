@@ -135,9 +135,20 @@ return `
 
       .workspace {
         display: grid;
-        grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr) minmax(0, 1.4fr);
-        gap: 20px;
-        align-items: stretch;
+        grid-template-rows: auto auto;
+        gap: 16px;
+      }
+
+      .workspace-top {
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(240px, 1fr);
+        gap: 16px;
+        align-items: start;
+      }
+
+      .workspace-bottom {
+        display: grid;
+        grid-template-columns: 1fr;
       }
 
       .panel {
@@ -189,8 +200,32 @@ return `
       }
 
       textarea {
-        min-height: 220px;
-        resize: vertical;
+        height: 140px;
+        resize: none;
+      }
+
+
+      // ========== PLAINTEXT PANEL ==========
+
+      .plaintext-container {
+        display: grid;
+        gap: 8px;
+      }
+
+      .textarea-wrapper {
+        position: relative;
+      }
+
+      .textarea-wrapper textarea {
+        width: 100%;
+        padding-bottom: 52px;
+      }
+
+      .plaintext-button {
+        position: absolute;
+        bottom: 12px;
+        right: 12px;
+        margin: 0;
       }
 
       button {
@@ -250,10 +285,89 @@ return `
         font-size: 0.98rem;
       }
 
-      @media (max-width: 920px) {
-        .workspace {
+      @media (max-width: 720px) {
+        .workspace-top {
           grid-template-columns: 1fr;
         }
+      }
+
+      .lesson {
+        min-height: 220px;
+        padding: 16px;
+        border-radius: 14px;
+        background: #fff;
+        border: 1px dashed var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .lesson-step {
+        opacity: 0;
+        animation: fadeIn 0.8s ease-out forwards;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      .lesson-title {
+        font-weight: 700;
+        color: var(--accent);
+        font-size: 0.95rem;
+        margin: 0;
+      }
+
+      .original-text {
+        font-family: "Courier New", monospace;
+        font-size: 1.1rem;
+        letter-spacing: 2px;
+        color: var(--text);
+      }
+
+      .cipher-explanation {
+        font-size: 0.92rem;
+        color: var(--muted);
+        line-height: 1.5;
+        font-style: italic;
+        margin: 0;
+      }
+
+      .letter-mapping {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .letter-pair {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        opacity: 0;
+        animation: fadeIn 0.5s ease-out forwards;
+      }
+
+      .letter-single {
+        font-family: "Courier New", monospace;
+        font-weight: 700;
+        font-size: 0.95rem;
+        padding: 4px 8px;
+        background: #f0f0f0;
+        border-radius: 4px;
+        min-width: 28px;
+        text-align: center;
+      }
+
+      .letter-arrow {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .letter-explanation {
+        font-size: 0.88rem;
+        color: var(--muted);
+        font-style: italic;
       }
     </style>
   </head>
@@ -263,39 +377,128 @@ return `
       <h1>Cipher Project</h1>
       <p>Choose a cipher, enter plaintext, adjust its parameters, and view the ciphertext from left to right.</p>
 
-      <form method="post" action="/">
-        <section class="workspace">
-          <section class="panel">
-            <h2>Plaintext</h2>
-            <label for="plaintext">
-              Message
-              <textarea id="plaintext" name="plaintext" placeholder="Type your message here...">${escapeHtml(plaintext)}</textarea>
-            </label>
-          </section>
+      <form id="encryptForm" method="post">
+        <div class="workspace">
+          <div class="workspace-top">
+            <section class="panel">
+              <h2>Plaintext</h2>
+              <div class="plaintext-container">
+                <label for="plaintext">Message</label>
+                <div class="textarea-wrapper">
+                  <textarea id="plaintext" name="plaintext" placeholder="Type your message here...">${escapeHtml(plaintext)}</textarea>
+                  <button type="submit" class="plaintext-button">Encrypt</button>
+                </div>
+              </div>
+            </section>
 
-          <section class="panel parameters">
-            <h2>Parameters</h2>
-            <label for="cipher">
-              Cipher
-              <select id="cipher" name="cipher">
-                ${renderCipherOptions(selectedCipher)}
-              </select>
-            </label>
-            <!-- CHANGE: pass rails as third argument -->
-            ${renderParameterPanel(selectedCipher, shift, rails)}
-            ${error ? `<section class="error"><strong>Error:</strong> ${escapeHtml(error)}</section>` : ''}
-          </section>
+            <section class="panel parameters">
+              <h2>Parameters</h2>
+              <label for="cipher">
+                Cipher
+                <select id="cipher" name="cipher">
+                  ${renderCipherOptions(selectedCipher)}
+                </select>
+              </label>
+              ${renderParameterPanel(selectedCipher, shift, rails)}
+              ${error ? `<section class="error"><strong>Error:</strong> ${escapeHtml(error)}</section>` : ''}
+            </section>
+          </div>
 
-          <section class="panel output">
-            <h2>Ciphertext</h2>
-            <p>Encrypted output appears here.</p>
-            <code>${escapeHtml(ciphertext || 'Your ciphertext will appear here.')}</code>
-          </section>
-        </section>
-
-        <button type="submit">Encrypt Text</button>
+          <div class="workspace-bottom">
+            <section class="panel output">
+              <h2>Ciphertext</h2>
+              <p>Encrypted output appears here.</p>
+              <div id="outputContent">
+                <code>${escapeHtml(ciphertext || 'Your ciphertext will appear here.')}</code>
+              </div>
+            </section>
+          </div>
+        </div>
       </form>
     </main>
+
+    <script>
+      const form = document.getElementById('encryptForm');
+      const outputContent = document.getElementById('outputContent');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(form);
+        const data = {
+          plaintext: formData.get('plaintext'),
+          shift: formData.get('shift') || '0',
+          rails: formData.get('rails') || '2',
+          cipher: formData.get('cipher'),
+        };
+
+        try {
+          const response = await fetch('/api/encrypt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            outputContent.innerHTML = \`<section class="error"><strong>Error:</strong> \${escapeHtml(errorData.error)}</section>\`;
+            return;
+          }
+
+          const result = await response.json();
+          
+          // Build the visual lesson
+          const lessonHTML = \`
+            <div class="lesson">
+              <div class="lesson-step" style="animation-delay: 0s">
+                <p class="lesson-title">Original Text</p>
+                <div class="original-text">\${escapeHtml(result.plaintext)}</div>
+              </div>
+              <div class="lesson-step" style="animation-delay: 0.6s">
+                <p class="lesson-title">How It Works</p>
+                <p class="cipher-explanation">\${escapeHtml(result.explanation)}</p>
+              </div>
+              <div class="lesson-step" style="animation-delay: 1.2s">
+                <p class="lesson-title">Transformation</p>
+                <div class="letter-mapping" id="letterMapping"></div>
+              </div>
+            </div>
+          \`;
+          
+          outputContent.innerHTML = lessonHTML;
+          
+          // Animate letter pairs
+          const mappingContainer = document.getElementById('letterMapping');
+          result.mapping.forEach((pair, index) => {
+            const delay = 1.6 + (index * 0.4);
+            const pairEl = document.createElement('div');
+            pairEl.className = pair.isSpace ? 'letter-pair space' : 'letter-pair';
+            pairEl.style.animationDelay = delay + 's';
+            
+            if (!pair.isSpace) {
+              pairEl.innerHTML = \`
+                <span class="letter-single">\${escapeHtml(pair.original)}</span>
+                <span class="letter-arrow">→</span>
+                <span class="letter-single">\${escapeHtml(pair.cipher)}</span>
+                <span class="letter-explanation">\${escapeHtml(pair.explanation)}</span>
+              \`;
+              mappingContainer.appendChild(pairEl);
+            }
+          });
+        } catch (error) {
+          outputContent.innerHTML = \`<section class="error"><strong>Error:</strong> \${escapeHtml(error.message)}</section>\`;
+        }
+      });
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+    </script>
   </body>
   </html>
 `;

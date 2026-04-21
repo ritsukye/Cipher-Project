@@ -5,6 +5,7 @@ const { railFenceCipher } = require('./src/ciphers/railfence.js');
 const app = express();
 const port = 3000;
 
+app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Strips non-letter characters except spaces, preserving space positions
@@ -109,6 +110,95 @@ function reinsertSpaces(original, encryptedLetters) {
     return encryptedLetters[letterIndex++] ?? '';
   }).join('');
 }
+
+function generateLetterMapping(original, ciphertext, cipher, params) {
+  const mapping = [];
+  let originalIndex = 0;
+  let ciphertextIndex = 0;
+
+  while (originalIndex < original.length && ciphertextIndex < ciphertext.length) {
+    const origChar = original[originalIndex];
+    const cipherChar = ciphertext[ciphertextIndex];
+
+    if (origChar === ' ') {
+      mapping.push({ original: ' ', cipher: ' ', isSpace: true });
+      originalIndex++;
+      ciphertextIndex++;
+    } else {
+      let explanation = '';
+      if (cipher === 'caesar') {
+        explanation = `'${origChar.toUpperCase()}' shifted by ${params.shift} → '${cipherChar.toUpperCase()}'`;
+      } else if (cipher === 'railfence') {
+        explanation = `'${origChar.toUpperCase()}' placed on rail ${params.railAssignments?.[originalIndex] ?? '?'} → '${cipherChar.toUpperCase()}'`;
+      }
+      mapping.push({ original: origChar, cipher: cipherChar, isSpace: false, explanation });
+      originalIndex++;
+      ciphertextIndex++;
+    }
+  }
+
+  return mapping;
+}
+
+// Get cipher explanation
+function getCipherExplanation(cipher, params) {
+  switch(cipher) {
+    case 'caesar':
+      return `Each letter is shifted ${params.shift} position${params.shift === 1 ? '' : 's'} forward in the alphabet. When a letter reaches the end, it wraps around to the beginning.`;
+    case 'railfence':
+      return `The text is arranged in ${params.rails} rows in a zigzag pattern, then read row by row to produce the ciphertext.`;
+    default:
+      return 'Cipher explanation not available yet.';
+  }
+}
+
+app.post('/api/encrypt', (req, res) => {
+  const { plaintext = '', shift = '0', rails = '2', cipher = 'caesar' } = req.body;
+  
+  const sanitized = lettersAndSpacesOnly(plaintext);
+  
+  if (cipher === 'railfence') {
+    const numericRails = Number(rails);
+    
+    if (!Number.isFinite(numericRails) || numericRails < 2) {
+      return res.status(400).json({ error: 'Rails must be a valid number >= 2.' });
+    }
+    
+    const lettersOnly = sanitized.replace(/ /g, '');
+    const encryptedLetters = railFenceCipher(lettersOnly, numericRails);
+    const ciphertext = reinsertSpaces(sanitized, encryptedLetters);
+    
+    return res.json({
+      plaintext: sanitized,
+      ciphertext,
+      explanation: getCipherExplanation(cipher, { rails: numericRails }),
+      mapping: generateLetterMapping(sanitized, ciphertext, 'railfence', { rails: numericRails }),    });
+  }
+  
+  if (cipher === 'caesar') {
+    const numericShift = Number(shift);
+    
+    if (!Number.isFinite(numericShift)) {
+      return res.status(400).json({ error: 'Please enter a valid number for the shift.' });
+    }
+    
+    const lettersOnly = sanitized.replace(/ /g, '');
+    const encryptedLetters = caesarCipher(lettersOnly, numericShift);
+    const ciphertext = reinsertSpaces(sanitized, encryptedLetters);
+    
+    return res.json({
+      plaintext: sanitized,
+      ciphertext,
+      explanation: getCipherExplanation(cipher, { shift: numericShift }),
+      mapping: generateLetterMapping(sanitized, ciphertext, 'caesar', { shift: numericShift }),
+    });
+
+  }
+  
+  res.status(400).json({
+    error: `${cipherOptions.find((o) => o.value === cipher)?.label || 'Selected cipher'} is not implemented yet.`,
+  });
+});
 
 app.listen(port, () => {
   console.log(`Server is listening at http://localhost:${port}`);
