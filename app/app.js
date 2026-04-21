@@ -1,6 +1,7 @@
 const express = require('express');
 const { landingPage, cipherOptions } = require('./public/utility.js');  // fix: was incorrectly destructuring non-exports
 const { railFenceCipher } = require('./src/ciphers/railfence.js');
+const { playfairCipher } = require('./src/ciphers/playfair.js');
 
 const app = express();
 const port = 3000;
@@ -22,11 +23,12 @@ function caesarCipher(text, shift) {
 }
 
 app.get('/', (req, res) => {
-  res.send(landingPage());
+  const { cipher = 'caesar' } = req.query;
+  res.send(landingPage({ selectedCipher: cipher }));
 });
 
 app.post('/', (req, res) => {
-  const { plaintext = '', shift = '0', rails = '2', cipher = 'caesar' } = req.body;
+  const { plaintext = '', shift = '0', rails = '2', keyword = '', cipher = 'caesar' } = req.body;
 
   // Sanitize: letters and spaces only (applies to all ciphers)
   const sanitized = lettersAndSpacesOnly(plaintext);
@@ -85,11 +87,35 @@ app.post('/', (req, res) => {
     return;
   }
 
+  if (cipher === 'playfair') {
+    if (!keyword.trim()) {
+      res.status(400).send(landingPage({
+        plaintext: sanitized,
+        keyword,
+        selectedCipher: cipher,
+        error: 'Please enter a keyword.',
+      }));
+      return;
+    }
+
+    const lettersOnly = sanitized.replace(/ /g, '');
+    const ciphertext = playfairCipher(lettersOnly, keyword);
+
+    res.send(landingPage({
+      plaintext: sanitized,
+      keyword,
+      selectedCipher: cipher,
+      ciphertext,
+    }));
+    return;
+  }
+
   // Fallback for unimplemented ciphers
   res.send(landingPage({
     plaintext: sanitized,
     shift,
     rails,
+    keyword,
     selectedCipher: cipher,
     ciphertext: `${cipherOptions.find((o) => o.value === cipher)?.label || 'Selected cipher'} is not implemented yet.`,
   }));

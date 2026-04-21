@@ -15,7 +15,7 @@ function renderCipherOptions(selectedCipher) {
 }
 
 // ADD rails parameter here
-function renderParameterPanel(selectedCipher, shift, rails) {
+function renderParameterPanel(selectedCipher, shift, rails, keyword) {
   if (selectedCipher === 'caesar') {
     return `
       <label for="shift">
@@ -23,6 +23,16 @@ function renderParameterPanel(selectedCipher, shift, rails) {
         <input id="shift" name="shift" type="number" min=0 max=25 onkeydown="return event.keyCode !== 189" value="${escapeHtml(String(shift))}" />
       </label>
       <p class="helper">Letters only. Spaces are preserved in output.</p>
+    `;
+  }
+
+  if (selectedCipher === 'playfair') {
+    return `
+      <label for="keyword">
+        Keyword
+        <input id="keyword" name="keyword" type="text" maxlength="25" placeholder="e.g. MONARCHY" value="${escapeHtml(String(keyword))}" />
+      </label>
+      <p class="helper">Letters only. I and J share a cell in the 5×5 square.</p>
     `;
   }
 
@@ -66,7 +76,8 @@ const cipherOptions = [
 function landingPage ({
   plaintext = '',
   shift = 0,
-  rails = 2,        // ADD: persisted rails value
+  rails = 2,
+  keyword = '',
   ciphertext = '',
   error = '',
   selectedCipher = 'caesar',
@@ -277,12 +288,12 @@ return `
             <h2>Parameters</h2>
             <label for="cipher">
               Cipher
-              <select id="cipher" name="cipher">
+              <select id="cipher" name="cipher" onchange="window.location='/?cipher='+this.value">
                 ${renderCipherOptions(selectedCipher)}
               </select>
             </label>
             <!-- CHANGE: pass rails as third argument -->
-            ${renderParameterPanel(selectedCipher, shift, rails)}
+            ${renderParameterPanel(selectedCipher, shift, rails, keyword)}
             ${error ? `<section class="error"><strong>Error:</strong> ${escapeHtml(error)}</section>` : ''}
           </section>
 
