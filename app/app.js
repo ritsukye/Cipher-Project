@@ -49,6 +49,7 @@ app.post('/', (req, res) => {
     const lettersOnly = sanitized.replace(/ /g, '');
     const encryptedLetters = railFenceCipher(lettersOnly, numericRails);
     const ciphertext = reinsertSpaces(sanitized, encryptedLetters);
+    const railAssignments = getRailAssignments(lettersOnly.length, numericRails);
 
     res.send(landingPage({
       plaintext: sanitized,
@@ -111,11 +112,25 @@ function reinsertSpaces(original, encryptedLetters) {
   }).join('');
 }
 
+function getRailAssignments(length, rails) {
+  const assignments = [];
+  let rail = 0;
+  let direction = 1;
+  for (let i = 0; i < length; i++) {
+    assignments.push(rail);
+    if (rail === rails - 1) direction = -1;
+    if (rail === 0) direction = 1;
+    rail += direction;
+  }
+  return assignments;
+}
+
 function generateLetterMapping(original, ciphertext, cipher, params) {
   const mapping = [];
   let originalIndex = 0;
   let ciphertextIndex = 0;
 
+  let letterCount = 0;
   while (originalIndex < original.length && ciphertextIndex < ciphertext.length) {
     const origChar = original[originalIndex];
     const cipherChar = ciphertext[ciphertextIndex];
@@ -129,11 +144,13 @@ function generateLetterMapping(original, ciphertext, cipher, params) {
       if (cipher === 'caesar') {
         explanation = `'${origChar.toUpperCase()}' shifted by ${params.shift} → '${cipherChar.toUpperCase()}'`;
       } else if (cipher === 'railfence') {
-        explanation = `'${origChar.toUpperCase()}' placed on rail ${params.railAssignments?.[originalIndex] ?? '?'} → '${cipherChar.toUpperCase()}'`;
+        const railNum = params.railAssignments?.[letterCount] ?? '?';
+        explanation = `'${origChar.toUpperCase()}' on rail ${typeof railNum === 'number' ? railNum + 1 : '?'} → cipher position '${cipherChar.toUpperCase()}'`;
       }
       mapping.push({ original: origChar, cipher: cipherChar, isSpace: false, explanation });
       originalIndex++;
       ciphertextIndex++;
+      letterCount++;
     }
   }
 
@@ -165,14 +182,27 @@ app.post('/api/encrypt', (req, res) => {
     }
     
     const lettersOnly = sanitized.replace(/ /g, '');
-    const encryptedLetters = railFenceCipher(lettersOnly, numericRails);
-    const ciphertext = reinsertSpaces(sanitized, encryptedLetters);
-    
-    return res.json({
-      plaintext: sanitized,
-      ciphertext,
-      explanation: getCipherExplanation(cipher, { rails: numericRails }),
-      mapping: generateLetterMapping(sanitized, ciphertext, 'railfence', { rails: numericRails }),    });
+const encryptedLetters = railFenceCipher(lettersOnly, numericRails);
+const ciphertext = reinsertSpaces(sanitized, encryptedLetters);
+const railAssignments = getRailAssignments(lettersOnly.length, numericRails);
+
+// Build the row-by-row reading order (indices into railAssignments)
+const rowOrder = [];
+for (let r = 0; r < numericRails; r++) {
+  railAssignments.forEach((rail, idx) => {
+    if (rail === r) rowOrder.push(idx);
+  });
+}
+
+  return res.json({
+    plaintext: sanitized,
+    ciphertext,
+    explanation: getCipherExplanation(cipher, { rails: numericRails }),
+    mapping: generateLetterMapping(sanitized, ciphertext, 'railfence', { rails: numericRails, railAssignments }),
+    railAssignments,
+    rails: numericRails,
+    rowOrder,
+    });
   }
   
   if (cipher === 'caesar') {
