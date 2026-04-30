@@ -15,7 +15,7 @@ function renderCipherOptions(selectedCipher) {
 }
 
 // ADD rails parameter here
-function renderParameterPanel(selectedCipher, shift, rails) {
+function renderParameterPanel(selectedCipher, shift, rails, key, iv) {
   if (selectedCipher === 'caesar') {
     return `
       <label for="shift">
@@ -34,6 +34,35 @@ function renderParameterPanel(selectedCipher, shift, rails) {
         <input id="rails" name="rails" type="number" min="2" max="20" value="${escapeHtml(String(rails))}" />
       </label>
       <p class="helper">Number of rows in the zigzag (minimum 2). Letters only; spaces are preserved.</p>
+    `;
+  }
+
+  if (selectedCipher === 'aes') {
+    return `
+      <label for="key">
+        Key (16 characters)
+        <input
+          id="key"
+          name="key"
+          type="text"
+          maxlength="16"
+          placeholder="e.g. MySecretKey12345"
+          value="${escapeHtml(key)}"
+          autocomplete="off"
+        />
+      </label>
+      <p class="helper">
+        Exactly 16 ASCII characters — the 128-bit key used to encrypt your message.
+        Keep this secret: anyone with the key can decrypt the output.
+      </p>
+      ${iv ? `
+        <label>Initialisation Vector (IV)
+          <input type="text" readonly value="${escapeHtml(iv)}" />
+        </label>
+        <p class="helper">
+          A random value generated each encryption. Needed to decrypt alongside the key.
+        </p>
+      ` : ''}
     `;
   }
 
@@ -67,7 +96,10 @@ function landingPage ({
   plaintext = '',
   shift = 0,
   rails = 2,
-  ciphertext = '',
+  key          = '',   // ADD
+  iv           = '',   // ADD
+  ciphertext   = '',
+  explanation  = '',   // ADD
   error = '',
   selectedCipher = 'caesar',
 }={}) {
@@ -460,6 +492,35 @@ return `
         stroke-dashoffset: 2000;
         transition: stroke-dashoffset 0.05s linear;
       }
+
+      .explanation {
+        margin-top: 8px;
+        padding: 16px 20px;
+        border-radius: 14px;
+        background: #fff;
+        border: 1px solid var(--border);
+        font-size: 0.93rem;
+        color: var(--muted);
+      }
+
+      .explanation h3 {
+        margin: 0 0 10px;
+        font-size: 1rem;
+        color: var(--text);
+      }
+
+      .explanation p {
+        margin: 0 0 8px;
+        line-height: 1.6;
+      }
+
+      .explanation p:last-child {
+        margin-bottom: 0;
+      }
+
+      .explanation strong {
+        color: var(--text);
+      }
     </style>
   </head>
 
@@ -502,6 +563,12 @@ return `
               <div id="outputContent">
                 <code>${escapeHtml(ciphertext || 'Your ciphertext will appear here.')}</code>
               </div>
+              ${explanation ? `
+              <section class="explanation">
+                <h3>How this cipher works</h3>
+                ${explanation}
+              </section>
+            ` : ''}
             </section>
           </div>
         </div>
@@ -520,6 +587,7 @@ return `
           plaintext: formData.get('plaintext'),
           shift: formData.get('shift') || '0',
           rails: formData.get('rails') || '2',
+          key: formData.get('key') || '',   // ADD
           cipher: formData.get('cipher'),
         };
 
@@ -540,8 +608,10 @@ return `
 
           if (data.cipher === 'railfence') {
             renderRailFence(result);
-          } else {
+          } else if (data.cipher === 'caesar') {
             renderCaesar(result);
+          } else if (data.cipher === 'aes') {
+            renderAes(result);
           }
 
         } catch (error) {
@@ -601,6 +671,31 @@ return `
             }, revealDelay);
           }
         });
+      }
+
+      function renderAes(result) {
+        const lessonHTML = \`
+          <div class="lesson">
+            <div class="lesson-step" style="animation-delay: 0s">
+              <p class="lesson-title">Original Text</p>
+              <div class="original-text">\${escapeHtml(result.plaintext)}</div>
+            </div>
+            <div class="lesson-step" style="animation-delay: 0.6s">
+              <p class="lesson-title">How It Works</p>
+              <p class="cipher-explanation">$\{escapeHtml(result.explanation)}</p>
+            </div>
+            <div class="lesson-step" style="animation-delay: 1.2s">
+              <p class="lesson-title">Initialisation Vector (IV)</p>
+              <div class="original-text">\${escapeHtml(result.iv)}</div>
+              <p class="cipher-explanation" style="margin-top:6px">Random value generated each encryption. Store it alongside the ciphertext — both the key and IV are needed to decrypt.</p>
+            </div>
+            <div class="lesson-step" style="animation-delay: 1.8s">
+              <p class="lesson-title">Ciphertext</p>
+              <div class="original-text">\${escapeHtml(result.ciphertext)}</div>
+            </div>
+          </div>
+        \`;
+        outputContent.innerHTML = lessonHTML;
       }
 
       function renderRailFence(result) {
@@ -796,6 +891,15 @@ return `
                 <input id="rails" name="rails" type="number" min="2" max="20" value="2" />
               </label>
               <p class="helper">Number of rows in the zigzag (minimum 2). Letters only; spaces are preserved.</p>
+            \`);
+          } else if (cipher === 'aes') {
+            paramsSection.insertAdjacentHTML('beforeend', \`
+              <label for="key">
+                Key (16 characters)
+                <input id="key" name="key" type="text" maxlength="16"
+                  placeholder="e.g. MySecretKey12345" autocomplete="off" />
+              </label>
+              <p class="helper">Exactly 16 ASCII characters — the 128-bit key.</p>
             \`);
           } else {
             paramsSection.insertAdjacentHTML('beforeend', \`

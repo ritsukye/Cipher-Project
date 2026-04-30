@@ -1,6 +1,7 @@
 const express = require('express');
-const { landingPage, cipherOptions } = require('./public/utility.js');  // fix: was incorrectly destructuring non-exports
+const { landingPage, cipherOptions } = require('./public/utility.js');
 const { railFenceCipher } = require('./src/ciphers/railfence.js');
+const { aesCipher } = require('./src/ciphers/aes.js');
 
 const app = express();
 const port = 3000;
@@ -8,7 +9,8 @@ const port = 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Strips non-letter characters except spaces, preserving space positions
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function lettersAndSpacesOnly(text) {
   return text.replace(/[^a-zA-Z ]/g, '');
 }
@@ -22,88 +24,6 @@ function caesarCipher(text, shift) {
   });
 }
 
-app.get('/', (req, res) => {
-  res.send(landingPage());
-});
-
-app.post('/', (req, res) => {
-  const { plaintext = '', shift = '0', rails = '2', cipher = 'caesar' } = req.body;
-
-  // Sanitize: letters and spaces only (applies to all ciphers)
-  const sanitized = lettersAndSpacesOnly(plaintext);
-
-  if (cipher === 'railfence') {
-    const numericRails = Number(rails);
-
-    if (!Number.isFinite(numericRails) || numericRails < 2) {
-      res.status(400).send(landingPage({
-        plaintext: sanitized,
-        selectedCipher: cipher,
-        rails: rails,
-        error: 'Rails must be a valid number >= 2.',
-      }));
-      return;
-    }
-
-    // Encrypt only the letters, then reinsert spaces at their original positions
-    const lettersOnly = sanitized.replace(/ /g, '');
-    const encryptedLetters = railFenceCipher(lettersOnly, numericRails);
-    const ciphertext = reinsertSpaces(sanitized, encryptedLetters);
-    const railAssignments = getRailAssignments(lettersOnly.length, numericRails);
-
-    res.send(landingPage({
-      plaintext: sanitized,
-      selectedCipher: cipher,
-      rails: numericRails,
-      ciphertext,
-    }));
-    return;
-  }
-
-  if (cipher === 'caesar') {
-    const numericShift = Number(shift);
-
-    if (!Number.isFinite(numericShift)) {
-      res.status(400).send(landingPage({
-        plaintext: sanitized,
-        shift,
-        selectedCipher: cipher,
-        error: 'Please enter a valid number for the shift.',
-      }));
-      return;
-    }
-
-    // Encrypt only the letters, then reinsert spaces
-    const lettersOnly = sanitized.replace(/ /g, '');
-    const encryptedLetters = caesarCipher(lettersOnly, numericShift);
-    const ciphertext = reinsertSpaces(sanitized, encryptedLetters);
-
-    res.send(landingPage({
-      plaintext: sanitized,
-      shift: numericShift,
-      selectedCipher: cipher,
-      ciphertext,
-    }));
-    return;
-  }
-
-  // Fallback for unimplemented ciphers
-  res.send(landingPage({
-    plaintext: sanitized,
-    shift,
-    rails,
-    selectedCipher: cipher,
-    ciphertext: `${cipherOptions.find((o) => o.value === cipher)?.label || 'Selected cipher'} is not implemented yet.`,
-  }));
-});
-
-/**
- * Given the original (sanitized) text with spaces and a string of
- * encrypted letters (spaces removed), reinserts spaces at their
- * original positions.
- *
- * e.g. original="HE LO", encrypted="FCJB" → "FC JB"
- */
 function reinsertSpaces(original, encryptedLetters) {
   let letterIndex = 0;
   return original.split('').map(char => {
@@ -129,8 +49,8 @@ function generateLetterMapping(original, ciphertext, cipher, params) {
   const mapping = [];
   let originalIndex = 0;
   let ciphertextIndex = 0;
-
   let letterCount = 0;
+
   while (originalIndex < original.length && ciphertextIndex < ciphertext.length) {
     const origChar = original[originalIndex];
     const cipherChar = ciphertext[ciphertextIndex];
@@ -153,79 +73,107 @@ function generateLetterMapping(original, ciphertext, cipher, params) {
       letterCount++;
     }
   }
-
   return mapping;
 }
 
-// Get cipher explanation
 function getCipherExplanation(cipher, params) {
-  switch(cipher) {
+  switch (cipher) {
     case 'caesar':
       return `Each letter is shifted ${params.shift} position${params.shift === 1 ? '' : 's'} forward in the alphabet. When a letter reaches the end, it wraps around to the beginning.`;
     case 'railfence':
       return `The text is arranged in ${params.rails} rows in a zigzag pattern, then read row by row to produce the ciphertext.`;
+    case 'aes':
+      return 'AES-128 arranges your message into a 4×4 grid of bytes, then scrambles it across 10 rounds of SubBytes, ShiftRows, MixColumns, and AddRoundKey operations.';
     default:
       return 'Cipher explanation not available yet.';
   }
 }
 
+// ── Routes ────────────────────────────────────────────────────────────────────
+
+app.get('/', (req, res) => {
+  res.send(landingPage());
+});
+
 app.post('/api/encrypt', (req, res) => {
-  const { plaintext = '', shift = '0', rails = '2', cipher = 'caesar' } = req.body;
-  
+  var { plaintext = '', shift = '0', rails = '2', cipher = 'caesar', key = '' } = req.body;
+
   const sanitized = lettersAndSpacesOnly(plaintext);
-  
+  const lettersOnly = sanitized.replace(/ /g, '');
+
+  // ── AES ──
+  if (cipher === 'aes') {
+    // const trimmedKey = key.slice(0, 16);
+    key = "abcdefghijklmnop"
+    trimmedKey = "abcdefghijklmnop"
+
+    if (Buffer.from(key, 'binary').length !== 16) {
+      return res.status(400).json({ error: 'AES-128 requires a key that is exactly 16 characters long. Your string has ' + Buffer.from(key, 'binary').length + ' characters.' });
+    }
+
+    try {
+      const { ciphertext, iv } = aesCipher(lettersOnly, trimmedKey);
+      return res.json({
+        plaintext: sanitized,
+        ciphertext,
+        iv,
+        explanation: getCipherExplanation('aes', {}),
+      });
+    } catch (err) {
+      return res.status(500).json({ error: `Encryption failed: ${err.message}` });
+    }
+  }
+
+  // ── Rail Fence ──
   if (cipher === 'railfence') {
     const numericRails = Number(rails);
-    
+
     if (!Number.isFinite(numericRails) || numericRails < 2) {
       return res.status(400).json({ error: 'Rails must be a valid number >= 2.' });
     }
-    
-    const lettersOnly = sanitized.replace(/ /g, '');
-const encryptedLetters = railFenceCipher(lettersOnly, numericRails);
-const ciphertext = reinsertSpaces(sanitized, encryptedLetters);
-const railAssignments = getRailAssignments(lettersOnly.length, numericRails);
 
-// Build the row-by-row reading order (indices into railAssignments)
-const rowOrder = [];
-for (let r = 0; r < numericRails; r++) {
-  railAssignments.forEach((rail, idx) => {
-    if (rail === r) rowOrder.push(idx);
-  });
-}
-
-  return res.json({
-    plaintext: sanitized,
-    ciphertext,
-    explanation: getCipherExplanation(cipher, { rails: numericRails }),
-    mapping: generateLetterMapping(sanitized, ciphertext, 'railfence', { rails: numericRails, railAssignments }),
-    railAssignments,
-    rails: numericRails,
-    rowOrder,
-    });
-  }
-  
-  if (cipher === 'caesar') {
-    const numericShift = Number(shift);
-    
-    if (!Number.isFinite(numericShift)) {
-      return res.status(400).json({ error: 'Please enter a valid number for the shift.' });
-    }
-    
-    const lettersOnly = sanitized.replace(/ /g, '');
-    const encryptedLetters = caesarCipher(lettersOnly, numericShift);
+    const encryptedLetters = railFenceCipher(lettersOnly, numericRails);
     const ciphertext = reinsertSpaces(sanitized, encryptedLetters);
-    
+    const railAssignments = getRailAssignments(lettersOnly.length, numericRails);
+
+    const rowOrder = [];
+    for (let r = 0; r < numericRails; r++) {
+      railAssignments.forEach((rail, idx) => {
+        if (rail === r) rowOrder.push(idx);
+      });
+    }
+
     return res.json({
       plaintext: sanitized,
       ciphertext,
-      explanation: getCipherExplanation(cipher, { shift: numericShift }),
+      explanation: getCipherExplanation('railfence', { rails: numericRails }),
+      mapping: generateLetterMapping(sanitized, ciphertext, 'railfence', { railAssignments }),
+      railAssignments,
+      rails: numericRails,
+      rowOrder,
+    });
+  }
+
+  // ── Caesar ──
+  if (cipher === 'caesar') {
+    const numericShift = Number(shift);
+
+    if (!Number.isFinite(numericShift)) {
+      return res.status(400).json({ error: 'Please enter a valid number for the shift.' });
+    }
+
+    const encryptedLetters = caesarCipher(lettersOnly, numericShift);
+    const ciphertext = reinsertSpaces(sanitized, encryptedLetters);
+
+    return res.json({
+      plaintext: sanitized,
+      ciphertext,
+      explanation: getCipherExplanation('caesar', { shift: numericShift }),
       mapping: generateLetterMapping(sanitized, ciphertext, 'caesar', { shift: numericShift }),
     });
-
   }
-  
-  res.status(400).json({
+
+  return res.status(400).json({
     error: `${cipherOptions.find((o) => o.value === cipher)?.label || 'Selected cipher'} is not implemented yet.`,
   });
 });
