@@ -1,6 +1,7 @@
 const express = require('express');
 const { landingPage, cipherOptions } = require('./public/utility.js');
 const { railFenceCipher } = require('./src/ciphers/railfence.js');
+const { playfairCipher } = require('./src/ciphers/playfair.js');
 const { aesCipher } = require('./src/ciphers/aes.js');
 
 const app = express();
@@ -92,7 +93,8 @@ function getCipherExplanation(cipher, params) {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => {
-  res.send(landingPage());
+  const { cipher = 'caesar' } = req.query;
+  res.send(landingPage({ selectedCipher: cipher }));
 });
 
 app.post('/api/encrypt', (req, res) => {
@@ -173,9 +175,38 @@ app.post('/api/encrypt', (req, res) => {
     });
   }
 
-  return res.status(400).json({
-    error: `${cipherOptions.find((o) => o.value === cipher)?.label || 'Selected cipher'} is not implemented yet.`,
-  });
+  if (cipher === 'playfair') {
+    if (!keyword.trim()) {
+      res.status(400).send(landingPage({
+        plaintext: sanitized,
+        keyword,
+        selectedCipher: cipher,
+        error: 'Please enter a keyword.',
+      }));
+      return;
+    }
+
+    const lettersOnly = sanitized.replace(/ /g, '');
+    const ciphertext = playfairCipher(lettersOnly, keyword);
+
+    res.send(landingPage({
+      plaintext: sanitized,
+      keyword,
+      selectedCipher: cipher,
+      ciphertext,
+    }));
+    return;
+  }
+
+  // Fallback for unimplemented ciphers
+  res.send(landingPage({
+    plaintext: sanitized,
+    shift,
+    rails,
+    keyword,
+    selectedCipher: cipher,
+    ciphertext: `${cipherOptions.find((o) => o.value === cipher)?.label || 'Selected cipher'} is not implemented yet.`,
+  }));
 });
 
 app.listen(port, () => {

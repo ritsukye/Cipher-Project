@@ -26,6 +26,16 @@ function renderParameterPanel(selectedCipher, shift, rails, key, iv) {
     `;
   }
 
+  if (selectedCipher === 'playfair') {
+    return `
+      <label for="keyword">
+        Keyword
+        <input id="keyword" name="keyword" type="text" maxlength="25" placeholder="e.g. MONARCHY" value="${escapeHtml(String(keyword))}" />
+      </label>
+      <p class="helper">Letters only. I and J share a cell in the 5×5 square.</p>
+    `;
+  }
+
   if (selectedCipher === 'railfence') {
     return `
       <label for="rails">
