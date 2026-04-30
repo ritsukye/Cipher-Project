@@ -790,20 +790,180 @@ return `
         });
       }
 
+
+      // ====================== RENDER PLAYFAIR ======================
       function renderPlayfair(result) {
+        const letters = result.plaintext.toUpperCase().replace(/ /g, '').replace(/J/g, 'I');
+        const digraphs = [];
+        let i = 0;
+        while (i < letters.length) {
+          const a = letters[i];
+          const b = letters[i + 1];
+          if (b === undefined) {
+            digraphs.push({ a, b: a === 'X' ? 'Q' : 'X', padded: true, repeated: false });
+            i += 1;
+          } else if (a === b) {
+            digraphs.push({ a, b: a === 'X' ? 'Q' : 'X', padded: false, repeated: true });
+            i += 1;
+          } else {
+            digraphs.push({ a, b, padded: false, repeated: false });
+            i += 2;
+          }
+        }
+
+        // Build the 5x5 square from the keyword
+        const keyword = (result.keyword || '').toUpperCase().replace(/J/g, 'I').replace(/[^A-Z]/g, '');
+        const seen = new Set();
+        const squareLetters = [];
+        const normalized = keyword + 'ABCDEFGHIKLMNOPQRSTUVWXYZ';
+        for (const ch of normalized) {
+          if (!seen.has(ch)) {
+            seen.add(ch);
+            squareLetters.push(ch);
+          }
+        }
+        const square = Array.from({ length: 5 }, (_, r) => squareLetters.slice(r * 5, r * 5 + 5));
+        const keywordSet = new Set(keyword.split(''));
+
+        const gridHTML = square.map(row =>
+          row.map(ch => {
+            const isKeyword = keywordSet.has(ch);
+            return \`<div class="pf-cell \${isKeyword ? 'pf-cell-keyword' : 'pf-cell-fill'}">\${escapeHtml(ch)}</div>\`;
+          }).join('')
+        ).join('');
+
+        const digraphHTML = digraphs.map(pair => {
+          const bStyle = (pair.repeated || pair.padded) ? 'filler' : '';
+          const note = pair.repeated
+            ? \`<div class="digraph-note">repeated — filler inserted</div>\`
+            : pair.padded
+            ? \`<div class="digraph-note">odd letter — filler inserted</div>\`
+            : '';
+          return \`
+            <div class="digraph-pair">
+              <div class="digraph-note-wrapper">\${note}</div>
+              <div class="digraph-cells">
+                <span class="digraph-cell">\${escapeHtml(pair.a)}</span>
+                <span class="digraph-cell \${bStyle}">\${escapeHtml(pair.b)}</span>
+              </div>
+            </div>
+          \`;
+        }).join('');
+
         const lessonHTML = \`
+          <style>
+            .digraph-row {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 12px;
+              margin-top: 8px;
+              align-items: flex-end;
+            }
+            .digraph-pair {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              gap: 4px;
+            }
+            .digraph-note-wrapper {
+              min-height: 20px;
+              display: flex;
+              align-items: flex-end;
+            }
+            .digraph-note {
+              font-size: 0.72rem;
+              color: #dc2626;
+              font-style: italic;
+              text-align: center;
+              max-width: 90px;
+            }
+            .digraph-cells {
+              display: flex;
+              gap: 3px;
+            }
+            .digraph-cell {
+              font-family: "Courier New", monospace;
+              font-weight: 700;
+              font-size: 1rem;
+              width: 32px;
+              height: 32px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              border-radius: 6px;
+              background: #f0f0f0;
+              color: var(--text);
+            }
+            .digraph-cell.filler {
+              color: #dc2626;
+            }
+            .pf-grid {
+              display: grid;
+              grid-template-columns: repeat(5, 40px);
+              gap: 5px;
+              margin-top: 10px;
+            }
+            .pf-cell {
+              width: 40px;
+              height: 40px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-family: "Courier New", monospace;
+              font-weight: 700;
+              font-size: 1rem;
+              border-radius: 7px;
+            }
+            .pf-cell-keyword {
+              background: #ffe4d6;
+              color: var(--accent);
+              border: 1.5px solid #fdba74;
+            }
+            .pf-cell-fill {
+              background: #f0f0f0;
+              color: var(--text);
+            }
+            .pf-legend {
+              display: flex;
+              gap: 16px;
+              margin-top: 10px;
+              font-size: 0.85rem;
+              color: var(--muted);
+              align-items: center;
+            }
+            .pf-legend-dot {
+              width: 14px;
+              height: 14px;
+              border-radius: 3px;
+              display: inline-block;
+              margin-right: 5px;
+            }
+          </style>
           <div class="lesson">
             <div class="lesson-step" style="animation-delay: 0s">
               <p class="lesson-title">Original Text</p>
-              <div class="original-text">\${escapeHtml(result.plaintext)}</div>
+              <div class="original-text">\${escapeHtml(result.plaintext.toUpperCase())}</div>
             </div>
-            <div class="lesson-step" style="animation-delay: 0.6s">
+            <div class="lesson-step" style="animation-delay: 0.4s">
               <p class="lesson-title">How It Works</p>
               <p class="cipher-explanation">\${escapeHtml(result.explanation)}</p>
             </div>
+            <div class="lesson-step" style="animation-delay: 0.8s">
+              <p class="lesson-title">Plaintext split into digraphs</p>
+              <div class="digraph-row">\${digraphHTML}</div>
+            </div>
             <div class="lesson-step" style="animation-delay: 1.2s">
+              <p class="lesson-title">5×5 Key Square</p>
+              <p class="cipher-explanation">Built from keyword "\${escapeHtml((result.keyword || '').toUpperCase())}", then filled with remaining letters (I and J share a cell).</p>
+              <div class="pf-grid">\${gridHTML}</div>
+              <div class="pf-legend">
+                <span><span class="pf-legend-dot" style="background:#ffe4d6;border:1.5px solid #fdba74;"></span>From keyword</span>
+                <span><span class="pf-legend-dot" style="background:#f0f0f0;"></span>Remaining alphabet</span>
+              </div>
+            </div>
+            <div class="lesson-step" style="animation-delay: 1.6s">
               <p class="lesson-title">Ciphertext</p>
-              <div class="original-text">\${escapeHtml(result.ciphertext)}</div>
+              <div class="original-text">\${escapeHtml(result.ciphertext.toUpperCase())}</div>
             </div>
           </div>
         \`;
