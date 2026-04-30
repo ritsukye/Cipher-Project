@@ -811,164 +811,225 @@ return `
           }
         }
 
-        // Build the 5x5 square from the keyword
         const keyword = (result.keyword || '').toUpperCase().replace(/J/g, 'I').replace(/[^A-Z]/g, '');
         const seen = new Set();
         const squareLetters = [];
         const normalized = keyword + 'ABCDEFGHIKLMNOPQRSTUVWXYZ';
         for (const ch of normalized) {
-          if (!seen.has(ch)) {
-            seen.add(ch);
-            squareLetters.push(ch);
-          }
+          if (!seen.has(ch)) { seen.add(ch); squareLetters.push(ch); }
         }
         const square = Array.from({ length: 5 }, (_, r) => squareLetters.slice(r * 5, r * 5 + 5));
         const keywordSet = new Set(keyword.split(''));
 
-        const gridHTML = square.map(row =>
+        function findPos(ch) {
+          for (let r = 0; r < 5; r++)
+            for (let c = 0; c < 5; c++)
+              if (square[r][c] === ch) return [r, c];
+          return [-1, -1];
+        }
+
+        function encryptDigraph(a, b) {
+          const [ar, ac] = findPos(a);
+          const [br, bc] = findPos(b);
+          let rule, ca, cb, car, cac, cbr, cbc;
+
+          if (ar === br) {
+            rule = 'Same row — shift right';
+            cac = (ac + 1) % 5;
+            cbc = (bc + 1) % 5;
+            car = ar;
+            cbr = br;
+            ca = square[car][cac];
+            cb = square[cbr][cbc];
+          } else if (ac === bc) {
+            rule = 'Same column — shift down';
+            car = (ar + 1) % 5;
+            cbr = (br + 1) % 5;
+            cac = ac;
+            cbc = bc;
+            ca = square[car][cac];
+            cb = square[cbr][cbc];
+          } else {
+            rule = 'Rectangle — swap columns';
+            car = ar;
+            cbr = br;
+            cac = bc;
+            cbc = ac;
+            ca = square[car][cac];
+            cb = square[cbr][cbc];
+          }
+
+          return { rule, ca, cb, ar, ac, br, bc, car, cac, cbr, cbc };
+        }
+
+        const pairs = digraphs.map(d => ({ ...d, ...encryptDigraph(d.a, d.b) }));
+
+        const gridHTML1 = square.map(row =>
           row.map(ch => {
-            const isKeyword = keywordSet.has(ch);
-            return \`<div class="pf-cell \${isKeyword ? 'pf-cell-keyword' : 'pf-cell-fill'}">\${escapeHtml(ch)}</div>\`;
+            const isKw = keywordSet.has(ch);
+            return \`<div class="pf-cell \${isKw ? 'pf-cell-keyword' : 'pf-cell-fill'}">\${escapeHtml(ch)}</div>\`;
           }).join('')
         ).join('');
 
         const digraphHTML = digraphs.map(pair => {
-          const bStyle = (pair.repeated || pair.padded) ? 'filler' : '';
-          const note = pair.repeated
-            ? \`<div class="digraph-note">repeated — filler inserted</div>\`
-            : pair.padded
-            ? \`<div class="digraph-note">odd letter — filler inserted</div>\`
-            : '';
+          const bClass = (pair.repeated || pair.padded) ? 'filler' : '';
+          const note = pair.repeated ? \`<div class="digraph-note">repeated — filler inserted</div>\`
+            : pair.padded ? \`<div class="digraph-note">odd letter — filler inserted</div>\` : '';
           return \`
             <div class="digraph-pair">
               <div class="digraph-note-wrapper">\${note}</div>
               <div class="digraph-cells">
                 <span class="digraph-cell">\${escapeHtml(pair.a)}</span>
-                <span class="digraph-cell \${bStyle}">\${escapeHtml(pair.b)}</span>
+                <span class="digraph-cell \${bClass}">\${escapeHtml(pair.b)}</span>
               </div>
-            </div>
-          \`;
+            </div>\`;
         }).join('');
+
+        // Plain grid for encryption step
+        const plainGridHTML = square.map((row, r) =>
+          row.map((ch, c) =>
+            \`<div class="pf-cell pf-cell-plain" id="pgc-\${r}-\${c}">\${escapeHtml(ch)}</div>\`
+          ).join('')
+        ).join('');
+
+        const pairsNavHTML = pairs.map((p, idx) =>
+          \`<button type="button" class="pair-btn \${idx === 0 ? 'active' : ''}" data-idx="\${idx}">\${escapeHtml(p.a)}\${escapeHtml(p.b)}</button>\`
+        ).join('');
 
         const lessonHTML = \`
           <style>
-            .digraph-row {
-              display: flex;
-              flex-wrap: wrap;
-              gap: 12px;
-              margin-top: 8px;
-              align-items: flex-end;
-            }
-            .digraph-pair {
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              gap: 4px;
-            }
-            .digraph-note-wrapper {
-              min-height: 20px;
-              display: flex;
-              align-items: flex-end;
-            }
-            .digraph-note {
-              font-size: 0.72rem;
-              color: #dc2626;
-              font-style: italic;
-              text-align: center;
-              max-width: 90px;
-            }
-            .digraph-cells {
-              display: flex;
-              gap: 3px;
-            }
-            .digraph-cell {
-              font-family: "Courier New", monospace;
-              font-weight: 700;
-              font-size: 1rem;
-              width: 32px;
-              height: 32px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              border-radius: 6px;
-              background: #f0f0f0;
-              color: var(--text);
-            }
-            .digraph-cell.filler {
-              color: #dc2626;
-            }
-            .pf-grid {
-              display: grid;
-              grid-template-columns: repeat(5, 40px);
-              gap: 5px;
-              margin-top: 10px;
-            }
-            .pf-cell {
-              width: 40px;
-              height: 40px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-family: "Courier New", monospace;
-              font-weight: 700;
-              font-size: 1rem;
-              border-radius: 7px;
-            }
-            .pf-cell-keyword {
-              background: #ffe4d6;
-              color: var(--accent);
-              border: 1.5px solid #fdba74;
-            }
-            .pf-cell-fill {
-              background: #f0f0f0;
-              color: var(--text);
-            }
-            .pf-legend {
-              display: flex;
-              gap: 16px;
-              margin-top: 10px;
-              font-size: 0.85rem;
-              color: var(--muted);
-              align-items: center;
-            }
-            .pf-legend-dot {
-              width: 14px;
-              height: 14px;
-              border-radius: 3px;
-              display: inline-block;
-              margin-right: 5px;
-            }
+            .digraph-row { display:flex; flex-wrap:wrap; gap:12px; margin-top:8px; align-items:flex-end; }
+            .digraph-pair { display:flex; flex-direction:column; align-items:center; gap:4px; }
+            .digraph-note-wrapper { min-height:20px; display:flex; align-items:flex-end; }
+            .digraph-note { font-size:0.72rem; color:#dc2626; font-style:italic; text-align:center; max-width:90px; }
+            .digraph-cells { display:flex; gap:3px; }
+            .digraph-cell { font-family:"Courier New",monospace; font-weight:700; font-size:1rem; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:6px; background:#f0f0f0; color:var(--text); }
+            .digraph-cell.filler { color:#dc2626; }
+            .pf-grid { display:grid; grid-template-columns:repeat(5,40px); gap:5px; margin-top:10px; }
+            .pf-cell { width:40px; height:40px; display:flex; align-items:center; justify-content:center; font-family:"Courier New",monospace; font-weight:700; font-size:1rem; border-radius:7px; transition: font-size 0.25s ease, background 0.3s ease, color 0.3s ease; }
+            .pf-cell-keyword { background:#ffe4d6; color:var(--accent); border:1.5px solid #fdba74; }
+            .pf-cell-fill { background:#f0f0f0; color:var(--text); }
+            .pf-cell-plain { background:#f0f0f0; color:var(--text); }
+            .pf-cell-plain.pulse { font-size:1.35rem; background:#e0e0e0; }
+            .pf-cell-plain.result { background:#ffe4d6; color:var(--accent); }
+            .pf-legend { display:flex; gap:16px; margin-top:10px; font-size:0.85rem; color:var(--muted); align-items:center; }
+            .pf-legend-dot { width:14px; height:14px; border-radius:3px; display:inline-block; margin-right:5px; }
+            .encrypt-step { display:flex; gap:24px; align-items:flex-start; margin-top:10px; flex-wrap:wrap; }
+            .pair-nav { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+            .pair-btn { font-family:"Courier New",monospace; font-weight:700; font-size:0.9rem; padding:4px 10px; border-radius:6px; border:1.5px solid var(--border); background:#f0f0f0; cursor:pointer; color:var(--text); }
+            .pair-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+            .enc-panel { flex:1; min-width:180px; display:flex; flex-direction:column; gap:10px; justify-content:center; }
+            .enc-rule { font-size:0.88rem; font-weight:700; color:var(--accent); margin:0; }
+            .enc-arrow-row { display:flex; align-items:center; gap:10px; font-family:"Courier New",monospace; font-size:1.1rem; font-weight:700; }
+            .enc-arrow { font-size:1.4rem; color:var(--accent); }
+            .enc-letter { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:7px; background:#f0f0f0; }
+            .enc-letter.out { background:#ffe4d6; color:var(--accent); }
           </style>
           <div class="lesson">
-            <div class="lesson-step" style="animation-delay: 0s">
+            <div class="lesson-step" style="animation-delay:0s">
               <p class="lesson-title">Original Text</p>
               <div class="original-text">\${escapeHtml(result.plaintext.toUpperCase())}</div>
             </div>
-            <div class="lesson-step" style="animation-delay: 0.4s">
+            <div class="lesson-step" style="animation-delay:0.4s">
               <p class="lesson-title">How It Works</p>
               <p class="cipher-explanation">\${escapeHtml(result.explanation)}</p>
             </div>
-            <div class="lesson-step" style="animation-delay: 0.8s">
+            <div class="lesson-step" style="animation-delay:0.8s">
               <p class="lesson-title">Plaintext split into digraphs</p>
               <div class="digraph-row">\${digraphHTML}</div>
             </div>
-            <div class="lesson-step" style="animation-delay: 1.2s">
+            <div class="lesson-step" style="animation-delay:1.2s">
               <p class="lesson-title">5×5 Key Square</p>
-              <p class="cipher-explanation">Built from keyword "\${escapeHtml((result.keyword || '').toUpperCase())}", then filled with remaining letters (I and J share a cell).</p>
-              <div class="pf-grid">\${gridHTML}</div>
+              <p class="cipher-explanation">Built from keyword "\${escapeHtml((result.keyword||'').toUpperCase())}", then filled with remaining letters (I and J share a cell).</p>
+              <div class="pf-grid">\${gridHTML1}</div>
               <div class="pf-legend">
                 <span><span class="pf-legend-dot" style="background:#ffe4d6;border:1.5px solid #fdba74;"></span>From keyword</span>
                 <span><span class="pf-legend-dot" style="background:#f0f0f0;"></span>Remaining alphabet</span>
               </div>
             </div>
-            <div class="lesson-step" style="animation-delay: 1.6s">
+            <div class="lesson-step" style="animation-delay:1.6s">
+              <p class="lesson-title">Encrypting each digraph</p>
+              <div class="pair-nav">\${pairsNavHTML}</div>
+              <div class="encrypt-step">
+                <div class="pf-grid" id="plainGrid">\${plainGridHTML}</div>
+                <div class="enc-panel" id="encPanel">
+                  <p class="enc-rule" id="encRule"></p>
+                  <div class="enc-arrow-row">
+                    <div class="enc-letter" id="encInA"></div>
+                    <div class="enc-letter" id="encInB"></div>
+                    <span class="enc-arrow">→</span>
+                    <div class="enc-letter out" id="encOutA"></div>
+                    <div class="enc-letter out" id="encOutB"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="lesson-step" style="animation-delay:2s">
               <p class="lesson-title">Ciphertext</p>
               <div class="original-text">\${escapeHtml(result.ciphertext.toUpperCase())}</div>
             </div>
           </div>
         \`;
         outputContent.innerHTML = lessonHTML;
+
+        function clearGrid() {
+          document.querySelectorAll('.pf-cell-plain').forEach(el => {
+            el.classList.remove('pulse', 'result');
+          });
+        }
+
+        function showPair(idx) {
+          clearGrid();
+          const p = pairs[idx];
+
+          // Update nav buttons
+          document.querySelectorAll('.pair-btn').forEach((btn, i) => {
+            btn.classList.toggle('active', i === idx);
+          });
+
+          // Update panel text
+          document.getElementById('encRule').textContent = p.rule;
+          document.getElementById('encInA').textContent = p.a;
+          document.getElementById('encInB').textContent = p.b;
+          document.getElementById('encOutA').textContent = p.ca;
+          document.getElementById('encOutB').textContent = p.cb;
+
+          // Pulse input cells
+          const cellA = document.getElementById(\`pgc-\${p.ar}-\${p.ac}\`);
+          const cellB = document.getElementById(\`pgc-\${p.br}-\${p.bc}\`);
+          if (cellA) cellA.classList.add('pulse');
+          if (cellB) cellB.classList.add('pulse');
+
+          // After pulse, highlight output cells
+          setTimeout(() => {
+            if (cellA) cellA.classList.remove('pulse');
+            if (cellB) cellB.classList.remove('pulse');
+
+            const outA = document.getElementById(\`pgc-\${p.car}-\${p.cac}\`);
+            const outB = document.getElementById(\`pgc-\${p.cbr}-\${p.cbc}\`);
+            if (outA) outA.classList.add('result');
+            if (outB) outB.classList.add('result');
+
+            // Fade out result highlight
+            setTimeout(() => {
+              if (outA) outA.classList.remove('result');
+              if (outB) outB.classList.remove('result');
+            }, 1200);
+          }, 600);
+        }
+
+        // Wire up buttons
+        document.querySelectorAll('.pair-btn').forEach((btn, idx) => {
+          btn.addEventListener('click', () => showPair(idx));
+        });
+
+        // Show first pair after the step fades in
+        setTimeout(() => showPair(0), 1800);
       }
+
+
+
+
 
       function drawZigzagPath(cellEls, railAssignments, rowOrder, numCols, rails) {
         const wrapper = document.getElementById('zigzagWrapper');
