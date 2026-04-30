@@ -15,7 +15,7 @@ function renderCipherOptions(selectedCipher) {
 }
 
 // ADD rails parameter here
-function renderParameterPanel(selectedCipher, shift, rails, key, iv) {
+function renderParameterPanel(selectedCipher, shift, rails, key, iv, keyword = '') {
   if (selectedCipher === 'caesar') {
     return `
       <label for="shift">
@@ -112,6 +112,7 @@ function landingPage ({
   explanation  = '',   // ADD
   error = '',
   selectedCipher = 'caesar',
+  keyword = '',     // ADD
 }={}) {
 return `
   <!DOCTYPE html>
@@ -561,7 +562,7 @@ return `
                   ${renderCipherOptions(selectedCipher)}
                 </select>
               </label>
-              ${renderParameterPanel(selectedCipher, shift, rails)}
+                ${renderParameterPanel(selectedCipher, shift, rails, key, iv, keyword)}
               ${error ? `<section class="error"><strong>Error:</strong> ${escapeHtml(error)}</section>` : ''}
             </section>
           </div>
@@ -599,6 +600,7 @@ return `
           rails: formData.get('rails') || '2',
           key: formData.get('key') || '',   // ADD
           cipher: formData.get('cipher'),
+          keyword: formData.get('keyword') || '',
         };
 
         try {
@@ -622,7 +624,9 @@ return `
             renderCaesar(result);
           } else if (data.cipher === 'aes') {
             renderAes(result);
-          }
+          } else if (data.cipher === 'playfair') {
+            renderPlayfair(result);
+          }            
 
         } catch (error) {
           outputContent.innerHTML = \`<section class="error"><strong>Error:</strong> \${escapeHtml(error.message)}</section>\`;
@@ -786,6 +790,26 @@ return `
         });
       }
 
+      function renderPlayfair(result) {
+        const lessonHTML = \`
+          <div class="lesson">
+            <div class="lesson-step" style="animation-delay: 0s">
+              <p class="lesson-title">Original Text</p>
+              <div class="original-text">\${escapeHtml(result.plaintext)}</div>
+            </div>
+            <div class="lesson-step" style="animation-delay: 0.6s">
+              <p class="lesson-title">How It Works</p>
+              <p class="cipher-explanation">\${escapeHtml(result.explanation)}</p>
+            </div>
+            <div class="lesson-step" style="animation-delay: 1.2s">
+              <p class="lesson-title">Ciphertext</p>
+              <div class="original-text">\${escapeHtml(result.ciphertext)}</div>
+            </div>
+          </div>
+        \`;
+        outputContent.innerHTML = lessonHTML;
+      }
+
       function drawZigzagPath(cellEls, railAssignments, rowOrder, numCols, rails) {
         const wrapper = document.getElementById('zigzagWrapper');
         const grid = document.getElementById('zigzagGrid');
@@ -911,12 +935,14 @@ return `
               </label>
               <p class="helper">Exactly 16 ASCII characters — the 128-bit key.</p>
             \`);
-          } else {
+          } else if (cipher === 'playfair') {
             paramsSection.insertAdjacentHTML('beforeend', \`
-              <div class="placeholder">
-                <strong>Parameters coming soon</strong>
-                <p>This cipher is not wired up yet.</p>
-              </div>
+              <label for="keyword">
+                Keyword
+                <input id="keyword" name="keyword" type="text" maxlength="25"
+                  placeholder="e.g. MONARCHY" autocomplete="off" />
+              </label>
+              <p class="helper">Letters only. I and J share a cell in the 5×5 square.</p>
             \`);
           }
         });

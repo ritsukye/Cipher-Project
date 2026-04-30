@@ -98,20 +98,14 @@ app.get('/', (req, res) => {
 });
 
 app.post('/api/encrypt', (req, res) => {
-  var { plaintext = '', shift = '0', rails = '2', cipher = 'caesar', key = '' } = req.body;
+  var { plaintext = '', shift = '0', rails = '2', cipher = 'caesar', keyword = '', key = '' } = req.body;
 
   const sanitized = lettersAndSpacesOnly(plaintext);
   const lettersOnly = sanitized.replace(/ /g, '');
 
   // ── AES ──
   if (cipher === 'aes') {
-    // const trimmedKey = key.slice(0, 16);
-    key = "abcdefghijklmnop"
-    trimmedKey = "abcdefghijklmnop"
-
-    if (Buffer.from(key, 'binary').length !== 16) {
-      return res.status(400).json({ error: 'AES-128 requires a key that is exactly 16 characters long. Your string has ' + Buffer.from(key, 'binary').length + ' characters.' });
-    }
+    const trimmedKey = "abcdefghijklmnop";
 
     try {
       const { ciphertext, iv } = aesCipher(lettersOnly, trimmedKey);
@@ -175,38 +169,27 @@ app.post('/api/encrypt', (req, res) => {
     });
   }
 
+  // ── Playfair ──
   if (cipher === 'playfair') {
     if (!keyword.trim()) {
-      res.status(400).send(landingPage({
-        plaintext: sanitized,
-        keyword,
-        selectedCipher: cipher,
-        error: 'Please enter a keyword.',
-      }));
-      return;
+      return res.status(400).json({ error: 'Please enter a keyword.' });
     }
 
-    const lettersOnly = sanitized.replace(/ /g, '');
     const ciphertext = playfairCipher(lettersOnly, keyword);
 
-    res.send(landingPage({
+    return res.json({
       plaintext: sanitized,
-      keyword,
-      selectedCipher: cipher,
       ciphertext,
-    }));
-    return;
+      explanation: 'The plaintext is arranged into digraphs (letter pairs) and encrypted using a 5×5 key square built from the keyword. Same-row letters shift right, same-column letters shift down, and rectangle pairs swap columns.',
+    });
   }
 
-  // Fallback for unimplemented ciphers
-  res.send(landingPage({
+  // ── Fallback ──
+  return res.json({
     plaintext: sanitized,
-    shift,
-    rails,
-    keyword,
-    selectedCipher: cipher,
     ciphertext: `${cipherOptions.find((o) => o.value === cipher)?.label || 'Selected cipher'} is not implemented yet.`,
-  }));
+    explanation: '',
+  });
 });
 
 app.listen(port, () => {
