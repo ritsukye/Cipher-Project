@@ -180,6 +180,7 @@ app.post('/api/encrypt', (req, res) => {
     return res.json({
       plaintext: sanitized,
       ciphertext,
+      keyword,
       explanation: 'The plaintext is arranged into digraphs (letter pairs) and encrypted using a 5×5 key square built from the keyword. Same-row letters shift right, same-column letters shift down, and rectangle pairs swap columns.',
     });
   }
