@@ -2,14 +2,16 @@ const express = require('express');
 const { landingPage, cipherOptions } = require('./public/utility.js');
 const { railFenceCipher } = require('./src/ciphers/railfence.js');
 const { aesCipher } = require('./src/ciphers/aes.js');
+const { desCipher } = require('./src/ciphers/des.js');
 
 const app = express();
 const port = 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(express.static('public'));
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function lettersAndSpacesOnly(text) {
   return text.replace(/[^a-zA-Z ]/g, '');
@@ -84,6 +86,8 @@ function getCipherExplanation(cipher, params) {
       return `The text is arranged in ${params.rails} rows in a zigzag pattern, then read row by row to produce the ciphertext.`;
     case 'aes':
       return 'AES-128 arranges your message into a 4×4 grid of bytes, then scrambles it across 10 rounds of SubBytes, ShiftRows, MixColumns, and AddRoundKey operations.';
+    case 'des':
+      return 'DES splits your message into 64-bit blocks and runs each through 16 rounds of permutations, substitutions, and XOR operations using subkeys derived from your 8-character key.';
     default:
       return 'Cipher explanation not available yet.';
   }
@@ -91,33 +95,67 @@ function getCipherExplanation(cipher, params) {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
+// GET / — serve the landing page
 app.get('/', (req, res) => {
   res.send(landingPage());
 });
 
+// POST / — handles the rare case where JS is disabled and the form submits natively.
+// Redirects to GET / so the user always gets a proper page rather than a JSON error.
+app.post('/', (req, res) => {
+  res.redirect('/');
+});
+
+// POST /api/encrypt — the main JSON API used by the fetch() call in utility.js
 app.post('/api/encrypt', (req, res) => {
-  var { plaintext = '', shift = '0', rails = '2', cipher = 'caesar', key = '' } = req.body;
+  const { plaintext = '', shift = '0', rails = '2', cipher = 'caesar', key = '' } = req.body;
 
   const sanitized = lettersAndSpacesOnly(plaintext);
   const lettersOnly = sanitized.replace(/ /g, '');
 
   // ── AES ──
   if (cipher === 'aes') {
-    // const trimmedKey = key.slice(0, 16);
-    key = "abcdefghijklmnop"
-    trimmedKey = "abcdefghijklmnop"
+    const trimmedKey = key.slice(0, 16);  // silently truncate if too long
 
-    if (Buffer.from(key, 'binary').length !== 16) {
-      return res.status(400).json({ error: 'AES-128 requires a key that is exactly 16 characters long. Your string has ' + Buffer.from(key, 'binary').length + ' characters.' });
+    if (Buffer.byteLength(trimmedKey, 'utf8') < 1) {
+      return res.status(400).json({ error: 'Please enter a key for AES encryption.' });
     }
+    // Pad with spaces if shorter than 16 so Node crypto doesn't throw
+    const paddedKey = trimmedKey.padEnd(16, ' ');
 
     try {
-      const { ciphertext, iv } = aesCipher(lettersOnly, trimmedKey);
+      const { ciphertext, iv } = aesCipher(lettersOnly, paddedKey);
       return res.json({
         plaintext: sanitized,
         ciphertext,
         iv,
+        // Tell the client what key was actually used (trimmed/padded)
+        keyUsed: trimmedKey,
         explanation: getCipherExplanation('aes', {}),
+      });
+    } catch (err) {
+      return res.status(500).json({ error: `Encryption failed: ${err.message}` });
+    }
+  }
+
+  // ── DES ──
+  if (cipher === 'des') {
+    const trimmedKey = key.slice(0, 8);  // silently truncate if too long
+
+    if (Buffer.byteLength(trimmedKey, 'utf8') < 1) {
+      return res.status(400).json({ error: 'Please enter a key for DES encryption.' });
+    }
+    // Pad with spaces if shorter than 8
+    const paddedKey = trimmedKey.padEnd(8, ' ');
+
+    try {
+      const { ciphertext, iv } = desCipher(lettersOnly, paddedKey);
+      return res.json({
+        plaintext: sanitized,
+        ciphertext,
+        iv,
+        keyUsed: trimmedKey,
+        explanation: getCipherExplanation('des', {}),
       });
     } catch (err) {
       return res.status(500).json({ error: `Encryption failed: ${err.message}` });
