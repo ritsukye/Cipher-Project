@@ -47,7 +47,10 @@ function renderParameterPanel(selectedCipher, shift, rails, key, iv, keyword = '
     `;
   }
 
+  // REPLACE the AES block (lines 40–67):
   if (selectedCipher === 'aes') {
+    const displayKey = key.length > 16 ? key.slice(0, 16) : key;
+    const wasTruncated = key.length > 16;
     return `
       <label for="key">
         Key (16 characters)
@@ -55,14 +58,14 @@ function renderParameterPanel(selectedCipher, shift, rails, key, iv, keyword = '
           id="key"
           name="key"
           type="text"
-          maxlength="16"
           placeholder="e.g. MySecretKey12345"
-          value="${escapeHtml(key)}"
+          value="${escapeHtml(displayKey)}"
           autocomplete="off"
         />
       </label>
+      ${wasTruncated ? `<p class="helper warning">Your key was truncated to 16 characters.</p>` : ''}
       <p class="helper">
-        Exactly 16 ASCII characters — the 128-bit key used to encrypt your message.
+        Up to 16 ASCII characters — anything longer will be shortened to fit.
         Keep this secret: anyone with the key can decrypt the output.
       </p>
       ${iv ? `
@@ -71,6 +74,37 @@ function renderParameterPanel(selectedCipher, shift, rails, key, iv, keyword = '
         </label>
         <p class="helper">
           A random value generated each encryption. Needed to decrypt alongside the key.
+        </p>
+      ` : ''}
+    `;
+  }
+
+// REPLACE the DES block (add after the AES block):
+  if (selectedCipher === 'des') {
+    const displayKey = key.length > 8 ? key.slice(0, 8) : key;
+    const wasTruncated = key.length > 8;
+    return `
+      <label for="key">
+        Key (8 characters)
+        <input
+          id="key"
+          name="key"
+          type="text"
+          placeholder="e.g. mysecret"
+          value="${escapeHtml(displayKey)}"
+          autocomplete="off"
+        />
+      </label>
+      ${wasTruncated ? `<p class="helper warning">Your key was truncated to 8 characters.</p>` : ''}
+      <p class="helper">
+        Up to 8 ASCII characters — anything longer will be shortened to fit.
+      </p>
+      ${iv ? `
+        <label>Initialisation Vector (IV)
+          <input type="text" readonly value="${escapeHtml(iv)}" />
+        </label>
+        <p class="helper">
+          A random value generated each encryption. Needed alongside the key to decrypt.
         </p>
       ` : ''}
     `;
@@ -98,6 +132,7 @@ function getPlaceholderMessage(selectedCipher) {
 const cipherOptions = [
   { value: 'caesar', label: 'Caesar Cipher' },
   { value: 'aes', label: 'AES' },
+  { value: 'des',    label: 'DES' },
   { value: 'playfair', label: 'Playfair' },
   { value: 'railfence', label: 'Rail Fence' },
 ];
@@ -135,6 +170,11 @@ return `
 
       * {
         box-sizing: border-box;
+      }
+
+      .helper.warning {
+        color: #c2410c;
+        font-weight: 600;
       }
 
       body {
@@ -598,7 +638,7 @@ return `
           plaintext: formData.get('plaintext'),
           shift: formData.get('shift') || '0',
           rails: formData.get('rails') || '2',
-          key: formData.get('key') || '',   // ADD
+          key: formData.get('key') || '',
           cipher: formData.get('cipher'),
           keyword: formData.get('keyword') || '',
         };
@@ -620,13 +660,15 @@ return `
 
           if (data.cipher === 'railfence') {
             renderRailFence(result);
-          } else if (data.cipher === 'caesar') {
-            renderCaesar(result);
           } else if (data.cipher === 'aes') {
             renderAes(result);
           } else if (data.cipher === 'playfair') {
             renderPlayfair(result);
-          }            
+          } else if (data.cipher === 'des') {
+            renderDes(result);
+          } else {
+            renderCaesar(result);
+          }
 
         } catch (error) {
           outputContent.innerHTML = \`<section class="error"><strong>Error:</strong> \${escapeHtml(error.message)}</section>\`;
@@ -688,7 +730,7 @@ return `
       }
 
       function renderAes(result) {
-        const lessonHTML = \`
+        outputContent.innerHTML = \`
           <div class="lesson">
             <div class="lesson-step" style="animation-delay: 0s">
               <p class="lesson-title">Original Text</p>
@@ -696,12 +738,12 @@ return `
             </div>
             <div class="lesson-step" style="animation-delay: 0.6s">
               <p class="lesson-title">How It Works</p>
-              <p class="cipher-explanation">$\{escapeHtml(result.explanation)}</p>
+              <p class="cipher-explanation">\${escapeHtml(result.explanation)}</p>
             </div>
             <div class="lesson-step" style="animation-delay: 1.2s">
               <p class="lesson-title">Initialisation Vector (IV)</p>
               <div class="original-text">\${escapeHtml(result.iv)}</div>
-              <p class="cipher-explanation" style="margin-top:6px">Random value generated each encryption. Store it alongside the ciphertext — both the key and IV are needed to decrypt.</p>
+              <p class="cipher-explanation" style="margin-top:6px">Random value generated each encryption. Both the key and IV are needed to decrypt.</p>
             </div>
             <div class="lesson-step" style="animation-delay: 1.8s">
               <p class="lesson-title">Ciphertext</p>
@@ -709,7 +751,54 @@ return `
             </div>
           </div>
         \`;
-        outputContent.innerHTML = lessonHTML;
+      }
+
+      function renderDes(result) {
+        outputContent.innerHTML = \`
+          <div class="lesson">
+            <div class="lesson-step" style="animation-delay: 0s">
+              <p class="lesson-title">Original Text</p>
+              <div class="original-text">\${escapeHtml(result.plaintext)}</div>
+            </div>
+            <div class="lesson-step" style="animation-delay: 0.6s">
+              <p class="lesson-title">How It Works</p>
+              <p class="cipher-explanation">\${escapeHtml(result.explanation)}</p>
+            </div>
+            <div class="lesson-step" style="animation-delay: 1.2s">
+              <p class="lesson-title">Step 1 — Initial Permutation (IP)</p>
+              <p class="cipher-explanation">The 64-bit input block is shuffled by a fixed table before any rounds begin. This is purely a bitwise reordering — a legacy design artifact that adds no security on its own.</p>
+            </div>
+            <div class="lesson-step" style="animation-delay: 1.8s">
+              <p class="lesson-title">Step 2 — 16 Feistel Rounds</p>
+              <p class="cipher-explanation">The block is split into a 32-bit Left half and Right half. Each round: the Right half is expanded to 48 bits, XOR'd with a round subkey, compressed through 8 S-boxes back to 32 bits, permuted, then XOR'd with the Left half. The halves then swap.</p>
+            </div>
+            <div class="lesson-step" style="animation-delay: 2.4s">
+              <p class="lesson-title">Step 3 — S-boxes (Substitution)</p>
+              <p class="cipher-explanation">Each of the 8 S-boxes takes a 6-bit input and outputs 4 bits using a fixed lookup table. This is DES's only non-linear step and the source of its resistance to algebraic attacks.</p>
+            </div>
+            <div class="lesson-step" style="animation-delay: 3.0s">
+              <p class="lesson-title">Step 4 — Key Schedule</p>
+              <p class="cipher-explanation">Your key has every 8th bit stripped as a parity bit, leaving 56 effective bits. These are split, shifted, and permuted to produce 16 unique 48-bit subkeys — one per round.</p>
+            </div>
+            <div class="lesson-step" style="animation-delay: 3.6s">
+              <p class="lesson-title">Step 5 — Final Permutation (FP)</p>
+              <p class="cipher-explanation">After round 16, the halves swap one last time and pass through the inverse of the Initial Permutation to produce the final 64-bit ciphertext block.</p>
+            </div>
+            <div class="lesson-step" style="animation-delay: 4.2s">
+              <p class="lesson-title">⚠️ A note on DES security</p>
+              <p class="cipher-explanation">DES's 56-bit effective key can be brute-forced in hours with modern hardware. It is included here for educational purposes only. For real encryption, use AES.</p>
+            </div>
+            <div class="lesson-step" style="animation-delay: 4.8s">
+              <p class="lesson-title">Initialisation Vector (IV)</p>
+              <div class="original-text">\${escapeHtml(result.iv)}</div>
+              <p class="cipher-explanation" style="margin-top:6px">Random value generated each encryption. Both the key and IV are required to decrypt.</p>
+            </div>
+            <div class="lesson-step" style="animation-delay: 5.4s">
+              <p class="lesson-title">Ciphertext</p>
+              <div class="original-text">\${escapeHtml(result.ciphertext)}</div>
+            </div>
+          </div>
+        \`;
       }
 
       function renderRailFence(result) {
@@ -1139,7 +1228,8 @@ return `
               </label>
               <p class="helper">Letters only. Spaces are preserved in output.</p>
             \`);
-          } else if (cipher === 'railfence') {
+          } 
+          else if (cipher === 'railfence') {
             paramsSection.insertAdjacentHTML('beforeend', \`
               <label for="rails">
                 Rails
@@ -1147,16 +1237,50 @@ return `
               </label>
               <p class="helper">Number of rows in the zigzag (minimum 2). Letters only; spaces are preserved.</p>
             \`);
-          } else if (cipher === 'aes') {
+          // REPLACE the else block at line 867:
+          } 
+          else if (cipher === 'aes') {
             paramsSection.insertAdjacentHTML('beforeend', \`
               <label for="key">
                 Key (16 characters)
-                <input id="key" name="key" type="text" maxlength="16"
+                <input id="key" name="key" type="text"
                   placeholder="e.g. MySecretKey12345" autocomplete="off" />
               </label>
-              <p class="helper">Exactly 16 ASCII characters — the 128-bit key.</p>
+              <p class="helper" id="keyHelper">Up to 16 ASCII characters — anything longer will be shortened to fit.</p>
             \`);
-          } else if (cipher === 'playfair') {
+          } 
+          else if (cipher === 'playfair') {
+            document.getElementById('key').addEventListener('input', function () {
+              const helper = document.getElementById('keyHelper');
+              if (this.value.length > 16) {
+                helper.textContent = 'Your key will be truncated to 16 characters.';
+                helper.classList.add('warning');
+              } else {
+                helper.textContent = 'Up to 16 ASCII characters — anything longer will be shortened to fit.';
+                helper.classList.remove('warning');
+              }
+            });
+          } 
+          else if (cipher === 'des') {
+            paramsSection.insertAdjacentHTML('beforeend', \`
+              <label for="key">
+                Key (8 characters)
+                <input id="key" name="key" type="text"
+                  placeholder="e.g. mysecret" autocomplete="off" />
+              </label>
+              <p class="helper" id="keyHelper">Up to 8 ASCII characters — anything longer will be shortened to fit.</p>
+            \`);
+            document.getElementById('key').addEventListener('input', function () {
+              const helper = document.getElementById('keyHelper');
+              if (this.value.length > 8) {
+                helper.textContent = 'Your key will be truncated to 8 characters.';
+                helper.classList.add('warning');
+              } else {
+                helper.textContent = 'Up to 8 ASCII characters — anything longer will be shortened to fit.';
+                helper.classList.remove('warning');
+              }
+            });
+          } else {
             paramsSection.insertAdjacentHTML('beforeend', \`
               <label for="keyword">
                 Keyword
