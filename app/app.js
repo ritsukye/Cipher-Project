@@ -1,5 +1,6 @@
 const express = require('express');
 const { landingPage, cipherOptions } = require('./public/utility.js');
+const { caesarCipher } = require('./src/ciphers/caesar.js')
 const { railFenceCipher } = require('./src/ciphers/railfence.js');
 const { playfairCipher } = require('./src/ciphers/playfair.js');
 const { aesCipher } = require('./src/ciphers/aes.js');
@@ -16,15 +17,6 @@ app.use(express.static('public'));
 
 function lettersAndSpacesOnly(text) {
   return text.replace(/[^a-zA-Z ]/g, '');
-}
-
-function caesarCipher(text, shift) {
-  const normalizedShift = ((Number(shift) % 26) + 26) % 26;
-  return text.replace(/[a-zA-Z]/g, (char) => {
-    const base = char >= 'a' && char <= 'z' ? 97 : 65;
-    const shiftedCode = ((char.charCodeAt(0) - base + normalizedShift) % 26) + base;
-    return String.fromCharCode(shiftedCode);
-  });
 }
 
 function reinsertSpaces(original, encryptedLetters) {
