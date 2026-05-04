@@ -110,10 +110,14 @@ app.post('/', (req, res) => {
 
 // POST /api/encrypt — the main JSON API used by the fetch() call in utility.js
 app.post('/api/encrypt', (req, res) => {
-  var { plaintext = '', shift = '0', rails = '2', cipher = 'caesar', keyword = '', key = '' } = req.body;
+  var { plaintext = '', shift = '0', rails = '2', cipher = '', keyword = '', key = '' } = req.body;
 
   const sanitized = lettersAndSpacesOnly(plaintext);
   const lettersOnly = sanitized.replace(/ /g, '');
+
+  if (!sanitized) {
+    return res.status(400).json({ error: 'Please input plaintext.' });
+  }
 
   // ── AES ──
   if (cipher === 'aes') {
@@ -131,7 +135,6 @@ app.post('/api/encrypt', (req, res) => {
         plaintext: sanitized,
         ciphertext,
         iv,
-        // Tell the client what key was actually used (trimmed/padded)
         keyUsed: trimmedKey,
         explanation: getCipherExplanation('aes', {}),
       });
@@ -198,7 +201,7 @@ app.post('/api/encrypt', (req, res) => {
   if (cipher === 'caesar') {
     const numericShift = Number(shift);
 
-    if (!Number.isFinite(numericShift)) {
+    if (!Number.isFinite(numericShift) || shift < 1) {
       return res.status(400).json({ error: 'Please enter a valid number for the shift.' });
     }
 
@@ -215,8 +218,9 @@ app.post('/api/encrypt', (req, res) => {
 
   // ── Playfair ──
   if (cipher === 'playfair') {
-    if (!keyword.trim()) {
-      return res.status(400).json({ error: 'Please enter a keyword.' });
+
+    if (Buffer.byteLength(keyword, 'utf8') < 1) {
+      return res.status(400).json({ error: 'Please enter a keyword for Playfair encryption.' });
     }
 
     const ciphertext = playfairCipher(lettersOnly, keyword);

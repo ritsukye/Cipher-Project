@@ -14,15 +14,14 @@ function renderCipherOptions(selectedCipher) {
   }).join('');
 }
 
-// ADD rails parameter here
 function renderParameterPanel(selectedCipher, shift, rails, key, iv, keyword = '') {
   if (selectedCipher === 'caesar') {
     return `
       <label for="shift">
         Shift
-        <input id="shift" name="shift" type="number" min=0 max=25 onkeydown="return event.keyCode !== 189" value="${escapeHtml(String(shift))}" />
+        <input id="shift" name="shift" type="number" min=1 max=25 onkeydown="return event.keyCode !== 189" value="${escapeHtml(String(shift))}" />
       </label>
-      <p class="helper">Letters only. Spaces are preserved in output.</p>
+      <p class="helper">Amount to shift letters by (minimum 1).</p>
     `;
   }
 
@@ -40,10 +39,9 @@ function renderParameterPanel(selectedCipher, shift, rails, key, iv, keyword = '
     return `
       <label for="rails">
         Rails
-        <!-- value is now populated from the server — persists across submits -->
-        <input id="rails" name="rails" type="number" min="2" max="20" value="${escapeHtml(String(rails))}" />
+        <input id="rails" name="rails" type="number" min=2 max=20 value="${escapeHtml(String(rails))}" />
       </label>
-      <p class="helper">Number of rows in the zigzag (minimum 2). Letters only; spaces are preserved.</p>
+      <p class="helper">Number of rows in the zigzag (minimum 2).</p>
     `;
   }
 
@@ -141,13 +139,13 @@ function landingPage ({
   plaintext = '',
   shift = 0,
   rails = 2,
-  key          = '',   // ADD
-  iv           = '',   // ADD
+  key          = '',  
+  iv           = '',   
   ciphertext   = '',
-  explanation  = '',   // ADD
+  explanation  = '',   
   error = '',
-  selectedCipher = 'caesar',
-  keyword = '',     // ADD
+  selectedCipher = '',
+  keyword = '',     
 }={}) {
 return `
   <!DOCTYPE html>
@@ -253,6 +251,11 @@ return `
         font-size: 0.95rem;
       }
 
+      p.helper {
+        margin-top: 0.75rem;
+        line-height: 1.5rem;
+      }
+
       .parameters {
         align-content: start;
         background: linear-gradient(180deg, #fffaf4 0%, #fff 100%);
@@ -354,8 +357,7 @@ return `
         border: 1px dashed var(--border);
       }
 
-      .placeholder p,
-      .helper {
+      .placeholder p {
         margin: 0;
         font-size: 0.92rem;
         color: var(--muted);
@@ -592,6 +594,7 @@ return `
                   <button type="submit" class="plaintext-button">Encrypt</button>
                 </div>
               </div>
+              <p class="helper"> <b> Caesar, Playfair, and Rail Fence </b> only allow letters in input. Any non-letter characters will be deleted. </p>
             </section>
 
             <section class="panel parameters">
@@ -602,7 +605,9 @@ return `
                   ${renderCipherOptions(selectedCipher)}
                 </select>
               </label>
+              <div id="parameterFields">
                 ${renderParameterPanel(selectedCipher, shift, rails, key, iv, keyword)}
+              </div>
               ${error ? `<section class="error"><strong>Error:</strong> ${escapeHtml(error)}</section>` : ''}
             </section>
           </div>
@@ -1116,10 +1121,6 @@ return `
         setTimeout(() => showPair(0), 1800);
       }
 
-
-
-
-
       function drawZigzagPath(cellEls, railAssignments, rowOrder, numCols, rails) {
         const wrapper = document.getElementById('zigzagWrapper');
         const grid = document.getElementById('zigzagGrid');
@@ -1213,86 +1214,16 @@ return `
             .replace(/'/g, '&#39;');
         }
 
+        ${getPlaceholderMessage.toString()}
+        ${renderParameterPanel.toString()}
+
+        function renderParameterFields(cipher) {
+          return renderParameterPanel(cipher, 0, 2, '', '', '');
+        }
+
         document.getElementById('cipher').addEventListener('change', function () {
-          const cipher = this.value;
-          const paramsSection = document.querySelector('.parameters');
-          
-          // Remove existing dynamic input (shift or rails)
-          paramsSection.querySelectorAll('label:not([for="cipher"]), .placeholder, .helper').forEach(el => el.remove());
-
-          if (cipher === 'caesar') {
-            paramsSection.insertAdjacentHTML('beforeend', \`
-              <label for="shift">
-                Shift
-                <input id="shift" name="shift" type="number" min="0" max="25" value="0" />
-              </label>
-              <p class="helper">Letters only. Spaces are preserved in output.</p>
-            \`);
-          } 
-          else if (cipher === 'railfence') {
-            paramsSection.insertAdjacentHTML('beforeend', \`
-              <label for="rails">
-                Rails
-                <input id="rails" name="rails" type="number" min="2" max="20" value="2" />
-              </label>
-              <p class="helper">Number of rows in the zigzag (minimum 2). Letters only; spaces are preserved.</p>
-            \`);
-          // REPLACE the else block at line 867:
-          } 
-          else if (cipher === 'aes') {
-            paramsSection.insertAdjacentHTML('beforeend', \`
-              <label for="key">
-                Key (16 characters)
-                <input id="key" name="key" type="text"
-                  placeholder="e.g. MySecretKey12345" autocomplete="off" />
-              </label>
-              <p class="helper" id="keyHelper">Up to 16 ASCII characters — anything longer will be shortened to fit.</p>
-            \`);
-          } 
-          else if (cipher === 'playfair') {
-            document.getElementById('key').addEventListener('input', function () {
-              const helper = document.getElementById('keyHelper');
-              if (this.value.length > 16) {
-                helper.textContent = 'Your key will be truncated to 16 characters.';
-                helper.classList.add('warning');
-              } else {
-                helper.textContent = 'Up to 16 ASCII characters — anything longer will be shortened to fit.';
-                helper.classList.remove('warning');
-              }
-            });
-          } 
-          else if (cipher === 'des') {
-            paramsSection.insertAdjacentHTML('beforeend', \`
-              <label for="key">
-                Key (8 characters)
-                <input id="key" name="key" type="text"
-                  placeholder="e.g. mysecret" autocomplete="off" />
-              </label>
-              <p class="helper" id="keyHelper">Up to 8 ASCII characters — anything longer will be shortened to fit.</p>
-            \`);
-            document.getElementById('key').addEventListener('input', function () {
-              const helper = document.getElementById('keyHelper');
-              if (this.value.length > 8) {
-                helper.textContent = 'Your key will be truncated to 8 characters.';
-                helper.classList.add('warning');
-              } else {
-                helper.textContent = 'Up to 8 ASCII characters — anything longer will be shortened to fit.';
-                helper.classList.remove('warning');
-              }
-            });
-          } else {
-            paramsSection.insertAdjacentHTML('beforeend', \`
-              <label for="keyword">
-                Keyword
-                <input id="keyword" name="keyword" type="text" maxlength="25"
-                  placeholder="e.g. MONARCHY" autocomplete="off" />
-              </label>
-              <p class="helper">Letters only. I and J share a cell in the 5×5 square.</p>
-            \`);
-          }
+          document.getElementById('parameterFields').innerHTML = renderParameterFields(this.value);
         });
-
-        
     </script>
   </body>
   </html>
